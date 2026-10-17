@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Chat</title>
+    <style>
+        /* Minimalist Purple Theme */
+        :root {
+            --primary: #9333ea;
+            --primary-hover: #7e22ce;
+            --bg-page: #faf5ff;
+            --bg-surface: #ffffff;
+            --border-color: #d8b4fe;
+            --text-main: #1f2937;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-page);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: var(--text-main);
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 450px;
+            background: var(--bg-surface);
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(147, 51, 234, 0.1);
+            display: flex;
+            flex-direction: column;
+            height: 80vh;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: var(--primary);
+            color: white;
+            padding: 16px 20px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Connection Status Indicator */
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            font-weight: normal;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background-color: #ef4444; /* Red for disconnected */
+            border-radius: 50%;
+            transition: background-color 0.3s ease;
+        }
+        
+        .status-dot.connected {
+            background-color: #22c55e; /* Green for connected */
+        }
+
+        .messages {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message {
+            background: var(--bg-page);
+            border-left: 4px solid var(--primary);
+            padding: 12px;
+            border-radius: 0 8px 8px 0;
+            font-size: 0.95rem;
+            word-wrap: break-word;
+        }
+
+        .input-group {
+            display: flex;
+            padding: 16px;
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-surface);
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            outline: none;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary);
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: var(--primary-hover);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chat-container">
+        <div class="chat-header">
+            Study Buddy
+            <div class="status">
+                <span id="status-text">Disconnected</span>
+                <div id="status-dot" class="status-dot"></div>
+            </div>
+        </div>
+        
+        <div id="messages" class="messages">
+            <!-- Messages will appear here -->
+        </div>
+        
+        <div class="input-group">
+            <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * UIController handles all DOM interactions.
+         * Keeping this separate allows you to swap it out for React/Vue components later.
+         */
+        class UIController {
+            constructor() {
+                this.messagesDiv = document.getElementById('messages');
+                this.statusDot = document.getElementById('status-dot');
+                this.statusText = document.getElementById('status-text');
+                this.input = document.getElementById('message-input');
+                this.sendBtn = document.getElementById('send-btn');
+            }
+
+            setConnectionStatus(isConnected) {
+                if (isConnected) {
+                    this.statusDot.classList.add('connected');
+                    this.statusText.textContent = 'Connected';
+                } else {
+                    this.statusDot.classList.remove('connected');
+                    this.statusText.textContent = 'Disconnected';
+                }
+            }
+
+            appendMessage(text) {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'message';
+                msgDiv.textContent = text;
+                this.messagesDiv.appendChild(msgDiv);
+                
+                // Auto-scroll to the bottom
+                this.messagesDiv.scrollTop = this.messagesDiv.scrollHeight;
+            }
+
+            clearInput() {
+                this.input.value = '';
+            }
+        }
+
+        /**
+         * WebSocketClient handles network logic cleanly.
+         */
+        class WebSocketClient {
+            constructor(url, uiController) {
+                this.url = url;
+                this.ui = uiController;
+                this.ws = null;
+            }
+
+            connect() {
+                this.ws = new WebSocket(this.url);
+
+                this.ws.onopen = () => {
+                    this.ui.setConnectionStatus(true);
+                };
+
+                this.ws.onmessage = (event) => {
+                    this.ui.appendMessage(event.data);
+                };
+
+                this.ws.onclose = () => {
+                    this.ui.setConnectionStatus(false);
+                    // Optional: Add auto-reconnect logic here later
+                };
+            }
+
+            sendMessage(text) {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(text);
+                }
+            }
+        }
+
+        // Initialize the application once the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            const ui = new UIController();
+            
+            // Adjust the port if your FastAPI app runs on a different one
+            const wsClient = new WebSocketClient('ws://localhost:8000/ws', ui);
+            wsClient.connect();
+
+            const handleSend = () => {
+                const text = ui.input.value.trim();
+                if (text) {
+                    wsClient.sendMessage(text);
+                    ui.clearInput();
+                }
+            };
+
+            // Event Listeners
+            ui.sendBtn.addEventListener('click', handleSend);
+            ui.input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleSend();
+            });
+        });
+    </script>
+</body>
+</html>
