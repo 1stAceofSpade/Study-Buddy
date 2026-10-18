@@ -7,4 +7,5 @@ pwdlib[argon2]
 python-multipart
 python-dotenv
 psycopg2-binary
-google-cloud-storage
+alembic
+psycopg2
