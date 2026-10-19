@@ -688,7 +688,7 @@ function ChatSidebar({ roomId, token, user, onPresenceChange }) {
   )
 }
 
-function StudyRoom({ room, buddy, token, user, onLeave }) {
+function StudyRoom({ room, buddy, token, user, onBack, onExit, leavingRoom, leaveError }) {
   const [activeTool, setActiveTool] = useState('timer')
   const [activeMembers, setActiveMembers] = useState(0)
   const [completionStatus, setCompletionStatus] = useState(null)
@@ -726,20 +726,26 @@ function StudyRoom({ room, buddy, token, user, onLeave }) {
         <section className="flex min-h-[620px] min-w-0 flex-col lg:min-h-0">
           <header className="flex min-h-[78px] items-center justify-between gap-4 border-b border-white/[0.06] px-4 py-3 sm:px-7">
             <div className="flex min-w-0 items-center gap-3">
-              <button aria-label="Leave study room" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-slate-400 transition hover:text-white" onClick={onLeave} type="button"><Icon name="back" size={17} /></button>
+              <button aria-label="Back to home" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-slate-400 transition hover:text-white disabled:cursor-wait disabled:opacity-50" disabled={leavingRoom} onClick={onBack} title="Back to home" type="button"><Icon name="back" size={17} /></button>
               <div className="min-w-0">
                 <p className="text-[10px] font-medium tracking-[0.16em] text-violet-300/70">STUDY ROOM</p>
                 <h1 className="truncate text-base font-semibold text-white sm:text-lg">{room.topic}</h1>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 sm:gap-3 sm:px-3">
-              <span className="flex -space-x-2">
-                <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#17101f] bg-gradient-to-br from-violet-400 to-indigo-500 text-[9px] font-bold text-white">{user.username.slice(0, 2).toUpperCase()}</span>
-                <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#17101f] bg-gradient-to-br from-fuchsia-400 to-violet-500 text-[9px] font-bold text-white">{buddy.username.slice(0, 2).toUpperCase()}</span>
-              </span>
-              <span className="text-[11px] text-slate-400"><strong className="text-slate-200">{activeMembers}</strong> active</span>
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 sm:gap-3 sm:px-3">
+                <span className="flex -space-x-2">
+                  <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#17101f] bg-gradient-to-br from-violet-400 to-indigo-500 text-[9px] font-bold text-white">{user.username.slice(0, 2).toUpperCase()}</span>
+                  <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#17101f] bg-gradient-to-br from-fuchsia-400 to-violet-500 text-[9px] font-bold text-white">{buddy.username.slice(0, 2).toUpperCase()}</span>
+                </span>
+                <span className="text-[11px] text-slate-400"><strong className="text-slate-200">{activeMembers}</strong> active</span>
+              </div>
+              <button className="rounded-xl border border-rose-400/20 bg-rose-400/[0.06] px-3 py-2 text-xs font-medium text-rose-300 transition hover:border-rose-400/40 hover:bg-rose-400/[0.12] disabled:cursor-wait disabled:opacity-50 sm:px-4" disabled={leavingRoom} onClick={onExit} type="button">
+                {leavingRoom ? 'Exiting...' : 'Exit room'}
+              </button>
             </div>
           </header>
+          {leaveError && <p aria-live="polite" className="mx-4 mt-4 rounded-xl border border-rose-400/10 bg-rose-400/[0.04] px-4 py-3 text-sm text-rose-300 sm:mx-7">{leaveError}</p>}
           <div className="flex min-h-0 flex-1 flex-col p-4 sm:p-7">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -778,6 +784,8 @@ function App() {
   const [buddy, setBuddy] = useState(null)
   const [roomModalOpen, setRoomModalOpen] = useState(false)
   const [room, setRoom] = useState(null)
+  const [leavingRoom, setLeavingRoom] = useState(false)
+  const [leaveError, setLeaveError] = useState('')
 
   useEffect(() => {
     if (!token) return undefined
@@ -830,12 +838,37 @@ function App() {
   }
 
   function openRoom(studyRoom) {
+    setLeaveError('')
     const otherMember = studyRoom.members.find((member) => member !== user.username)
     setBuddy({
       username: otherMember || user.username,
       initials: (otherMember || user.username).slice(0, 2).toUpperCase(),
     })
     setRoom(studyRoom)
+  }
+
+  function backToHome() {
+    setRoom(null)
+    setBuddy(null)
+    setLeaveError('')
+  }
+
+  async function leaveRoom() {
+    setLeavingRoom(true)
+    setLeaveError('')
+    try {
+      await apiRequest(`/rooms/${room.id}/leave`, {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer ' + token },
+      })
+      setRoom(null)
+      setBuddy(null)
+      setLeaveError('')
+    } catch (requestError) {
+      setLeaveError(requestError.message)
+    } finally {
+      setLeavingRoom(false)
+    }
   }
 
   return (
@@ -846,7 +879,7 @@ function App() {
       ) : !token || !user ? (
         <AuthView notice={authNotice} onAuthenticated={completeAuthentication} />
       ) : room ? (
-        <StudyRoom buddy={buddy} onLeave={() => setRoom(null)} room={room} token={token} user={user} />
+        <StudyRoom buddy={buddy} leaveError={leaveError} leavingRoom={leavingRoom} onBack={backToHome} onExit={leaveRoom} room={room} token={token} user={user} />
       ) : (
         <SearchDashboard
           onCreateRoom={(selectedBuddy) => { setBuddy(selectedBuddy); setRoomModalOpen(true) }}

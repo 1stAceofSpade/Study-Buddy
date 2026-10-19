@@ -152,6 +152,21 @@ async def join_room(
     return {"message": f"Successfully joined {room.name}"}
 
 
+@router.delete("/rooms/{room_id}/leave", status_code=200)
+async def leave_room(
+    room_id: int,
+    db: SessionDep,
+    user: User = Depends(get_current_user),
+):
+    room = require_room_member(db, room_id, user)
+    membership = db.get(RoomMember, (user.id, room_id))
+    if membership is None:
+        raise HTTPException(status_code=403, detail="You are not a member of this room")
+    db.delete(membership)
+    db.commit()
+    return {"message": f"Successfully left {room.name}"}
+
+
 @router.post("/invitations/{invitation_id}/accept", status_code=200)
 async def accept_room_invitation(
     invitation_id: int,
