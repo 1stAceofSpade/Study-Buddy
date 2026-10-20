@@ -12,7 +12,7 @@ if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
         "postgresql://", "postgresql+psycopg2://", 1
     )
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 360
 CORS_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
